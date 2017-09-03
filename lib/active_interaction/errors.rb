@@ -108,8 +108,9 @@ module ActiveInteraction
 
     def merge_messages!(other, move)
       other.messages.each do |attribute, messages|
+        attribute = move[attribute] if move.key?(attribute)
+
         messages.each do |message|
-          attribute = move[attribute] if move.key?(attribute)
           unless attribute?(attribute)
             message = full_message(attribute, message)
             attribute = :base
@@ -121,9 +122,9 @@ module ActiveInteraction
 
     def merge_details!(other, move)
       other.details.each do |attribute, details|
-        details.each do |detail|
-          attribute = move[attribute] if move.key?(attribute)
+        attribute = move[attribute] if move.key?(attribute)
 
+        details.each do |detail|
           detail = detail.dup
           error = detail.delete(:error)
 
