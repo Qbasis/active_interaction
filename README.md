@@ -19,7 +19,7 @@ handles your verbs.
 Read more on [the project page][] or check out [the full documentation][].
 
 - [Installation](#installation)
-- [Basic usage](#basic-usage)
+- [Getting Started](#getting-started)
   - [Validations](#validations)
 - [Filters](#filters)
   - [Array](#array)
@@ -30,7 +30,7 @@ Read more on [the project page][] or check out [the full documentation][].
   - [Object](#object)
   - [String](#string)
   - [Symbol](#symbol)
-  - [Dates and times](#dates-and-times)
+  - [Dates and Times](#dates-and-times)
     - [Date](#date)
     - [DateTime](#datetime)
     - [Time](#time)
@@ -48,15 +48,15 @@ Read more on [the project page][] or check out [the full documentation][].
     - [Edit](#edit)
     - [Update](#update)
   - [Structure](#structure)
-- [Advanced usage](#advanced-usage)
+- [Advanced Usage](#advanced-usage)
   - [Callbacks](#callbacks)
   - [Composition](#composition)
   - [Defaults](#defaults)
   - [Descriptions](#descriptions)
   - [Errors](#errors)
   - [Forms](#forms)
-  - [Grouped inputs](#grouped-inputs)
-  - [Optional inputs](#optional-inputs)
+  - [Grouped Inputs](#grouped-inputs)
+  - [Optional Inputs](#optional-inputs)
   - [Translations](#translations)
 - [Credits](#credits)
 
@@ -81,7 +81,7 @@ ActiveInteraction works with Ruby 2.0 through 2.4 and ActiveModel 4.0 through
 5.0. If you want to use ActiveInteraction with an older version of Ruby or
 ActiveModel, use ActiveInteraction < 3.0.0.
 
-## Basic usage
+## Getting Started
 
 To define an interaction, create a subclass of `ActiveInteraction::Base`. Then
 you need to do two things:
