@@ -25,6 +25,13 @@ Read more on [the project page][] or check out [the full documentation][].
   - [Optional Inputs](#optional-inputs)
   - [Grouped Inputs](#grouped-inputs)
   - [Validations](#validations)
+- [Advanced Usage](#advanced-usage)
+  - [Callbacks](#callbacks)
+  - [Composition](#composition)
+  - [Descriptions](#descriptions)
+  - [Errors](#errors)
+  - [Forms](#forms)
+  - [Translations](#translations)
 - [Filters](#filters)
   - [Array](#array)
   - [Boolean](#boolean)
@@ -52,13 +59,6 @@ Read more on [the project page][] or check out [the full documentation][].
     - [Edit](#edit)
     - [Update](#update)
   - [Structure](#structure)
-- [Advanced Usage](#advanced-usage)
-  - [Callbacks](#callbacks)
-  - [Composition](#composition)
-  - [Descriptions](#descriptions)
-  - [Errors](#errors)
-  - [Forms](#forms)
-  - [Translations](#translations)
 - [Credits](#credits)
 
 ## Installation
@@ -257,6 +257,323 @@ SayHello.run!(name: '')
 
 SayHello.run!(name: 'Taylor')
 # => "Hello, Taylor!"
+```
+
+## Advanced usage
+
+### Callbacks
+
+ActiveModel provides a powerful framework for defining callbacks.
+ActiveInteraction hooks into that framework to allow hooking into various parts
+of an interaction's lifecycle.
+
+``` rb
+class Increment < ActiveInteraction::Base
+  set_callback :type_check, :before, -> { puts 'before type check' }
+
+  integer :x
+
+  set_callback :validate, :after, -> { puts 'after validate' }
+
+  validates :x,
+    numericality: { greater_than_or_equal_to: 0 }
+
+  set_callback :execute, :around, lambda { |_interaction, block|
+    puts '>>>'
+    block.call
+    puts '<<<'
+  }
+
+  def execute
+    puts 'executing'
+    x + 1
+  end
+end
+
+Increment.run!(x: 1)
+# before type check
+# after validate
+# >>>
+# executing
+# <<<
+# => 2
+```
+
+In order, the available callbacks are `type_check`, `validate`, and `execute`.
+You can set `before`, `after`, or `around` on any of them.
+
+### Composition
+
+You can run interactions from within other interactions with `#compose`. If the
+interaction is successful, it'll return the result (just like if you had called
+it with `.run!`). If something went wrong, execution will halt immediately and
+the errors will be moved onto the caller.
+
+``` rb
+class Add < ActiveInteraction::Base
+  integer :x, :y
+
+  def execute
+    x + y
+  end
+end
+
+class AddThree < ActiveInteraction::Base
+  integer :x
+
+  def execute
+    compose(Add, x: x, y: 3)
+  end
+end
+
+AddThree.run!(x: 5)
+# => 8
+```
+
+To bring in filters from another interaction, use `.import_filters`. Combined
+with `inputs`, delegating to another interaction is a piece of cake.
+
+``` rb
+class AddAndDouble < ActiveInteraction::Base
+  import_filters Add
+
+  def execute
+    compose(Add, inputs) * 2
+  end
+end
+```
+
+Note that errors in composed interactions have a few tricky cases. See [the
+errors section][] for more information about them.
+
+### Descriptions
+
+Use the `desc` option to provide human-readable descriptions of filters. You
+should prefer these to comments because they can be used to generate
+documentation. The interaction class has a `.filters` method that returns a
+hash of filters. Each filter has a `#desc` method that returns the description.
+
+``` rb
+class Descriptive < ActiveInteraction::Base
+  string :first_name,
+    desc: 'your first name'
+  string :last_name,
+    desc: 'your last name'
+end
+
+Descriptive.filters.each do |name, filter|
+  puts "#{name}: #{filter.desc}"
+end
+# first_name: your first name
+# last_name: your last name
+```
+
+### Errors
+
+ActiveInteraction provides detailed errors for easier introspection and testing
+of errors. Detailed errors improve on regular errors by adding a symbol that
+represents the type of error that has occurred. Let's look at an example where
+an item is purchased using a credit card.
+
+``` rb
+class BuyItem < ActiveInteraction::Base
+  object :credit_card, :item
+  hash :options do
+    boolean :gift_wrapped
+  end
+
+  def execute
+    order = credit_card.purchase(item)
+    notify(credit_card.account)
+    order
+  end
+
+  private def notify(account)
+    # ...
+  end
+end
+```
+
+Having missing or invalid inputs causes the interaction to fail and return
+errors.
+
+``` rb
+outcome = BuyItem.run(item: 'Thing', options: { gift_wrapped: 'yes' })
+outcome.errors.messages
+# => {:credit_card=>["is required"], :item=>["is not a valid object"], :options=>["has an invalid nested value (\"gift_wrapped\" => \"yes\")"]}
+```
+
+Determining the type of error based on the string is difficult if not
+impossible. Calling `#details` instead of `#messages` on `errors` gives you
+the same list of errors with a testable label representing the error.
+
+``` rb
+outcome.errors.details
+# => {:credit_card=>[{:error=>:missing}], :item=>[{:type=>"object", :error=>:invalid_type}], :options=>[{:name=>"\"gift_wrapped\"", :value=>"\"yes\"", :error=>:invalid_nested}]}
+```
+
+Detailed errors can also be manually added during the execute call by passing a
+symbol to `#add` instead of a string.
+
+``` rb
+def execute
+  errors.add(:monster, :no_passage)
+end
+```
+
+These types of errors are standard as of Rails 5. ActiveInteraction's
+implementation is based off of [active_model-errors_details][].
+
+ActiveInteraction also supports merging errors. This is useful if you want to
+delegate validation to some other object. For example, if you have an
+interaction that updates a record, you might want that record to validate
+itself. By using the `#merge!` helper on `errors`, you can do exactly that.
+
+``` rb
+class UpdateThing < ActiveInteraction::Base
+  object :thing
+
+  def execute
+    unless thing.save
+      errors.merge!(thing.errors)
+    end
+
+    thing
+  end
+end
+```
+
+### Forms
+
+The outcome returned by `.run` can be used in forms as though it were an
+ActiveModel object. You can also create a form object by calling `.new` on the
+interaction.
+
+Given an application with an `Account` model we'll create a new `Account` using
+the `CreateAccount` interaction.
+
+```rb
+# GET /accounts/new
+def new
+  @account = CreateAccount.new
+end
+
+# POST /accounts
+def create
+  outcome = CreateAccount.run(params.fetch(:account, {}))
+
+  if outcome.valid?
+    redirect_to(outcome.result)
+  else
+    @account = outcome
+    render(:new)
+  end
+end
+```
+
+The form used to create a new `Account` has slightly more information on the
+`form_for` call than you might expect.
+
+```erb
+<%= form_for @account, as: :account, url: accounts_path do |f| %>
+  <%= f.text_field :first_name %>
+  <%= f.text_field :last_name %>
+  <%= f.submit 'Create' %>
+<% end %>
+```
+
+This is necessary because we want the form to act like it is creating a new
+`Account`. Defining `to_model` on the `CreateAccount` interaction tells the
+form to treat our interaction like an `Account`.
+
+```rb
+class CreateAccount < ActiveInteraction::Base
+  # ...
+
+  def to_model
+    Account.new
+  end
+end
+```
+
+Now our `form_for` call knows how to generate the correct URL and param name
+(i.e. `params[:account]`).
+
+```erb
+# app/views/accounts/new.html.erb
+<%= form_for @account do |f| %>
+  <%# ... %>
+<% end %>
+```
+
+If you have an interaction that updates an `Account`, you can define `to_model`
+to return the object you're updating.
+
+```rb
+class UpdateAccount < ActiveInteraction::Base
+  # ...
+
+  object :account
+
+  def to_model
+    account
+  end
+end
+```
+
+ActiveInteraction also supports [formtastic][] and [simple_form][]. The filters
+used to define the inputs on your interaction will relay type information to
+these gems. As a result, form fields will automatically use the appropriate
+input type.
+
+### Translations
+
+ActiveInteraction is i18n aware out of the box! All you have to do is add
+translations to your project. In Rails, these typically go into
+`config/locales`. For example, let's say that for some reason you want to print
+everything out backwards. Simply add translations for ActiveInteraction to your
+`hsilgne` locale.
+
+``` yml
+# config/locales/hsilgne.yml
+hsilgne:
+  active_interaction:
+    types:
+      array: yarra
+      boolean: naeloob
+      date: etad
+      date_time: emit etad
+      decimal: lamiced
+      file: elif
+      float: taolf
+      hash: hsah
+      integer: regetni
+      interface: ecafretni
+      object: tcejbo
+      string: gnirts
+      symbol: lobmys
+      time: emit
+    errors:
+      messages:
+        invalid: dilavni si
+        invalid_nested: (%{value} <= %{name}) eulav detsen dilavni na sah
+        invalid_type: '%{type} dilav a ton si'
+        missing: deriuqer si
+```
+
+Then set your locale and run interactions like normal.
+
+``` rb
+class I18nInteraction < ActiveInteraction::Base
+  string :name
+end
+
+I18nInteraction.run(name: false).errors.messages[:name]
+# => ["is not a valid string"]
+
+I18n.locale = :hsilgne
+I18nInteraction.run(name: false).errors.messages[:name]
+# => ["gnirts dilav a ton si"]
 ```
 
 ## Filters
@@ -994,323 +1311,6 @@ your `application.rb`
       - index.html.erb
       - new.html.erb
       - show.html.erb
-```
-
-## Advanced usage
-
-### Callbacks
-
-ActiveModel provides a powerful framework for defining callbacks.
-ActiveInteraction hooks into that framework to allow hooking into various parts
-of an interaction's lifecycle.
-
-``` rb
-class Increment < ActiveInteraction::Base
-  set_callback :type_check, :before, -> { puts 'before type check' }
-
-  integer :x
-
-  set_callback :validate, :after, -> { puts 'after validate' }
-
-  validates :x,
-    numericality: { greater_than_or_equal_to: 0 }
-
-  set_callback :execute, :around, lambda { |_interaction, block|
-    puts '>>>'
-    block.call
-    puts '<<<'
-  }
-
-  def execute
-    puts 'executing'
-    x + 1
-  end
-end
-
-Increment.run!(x: 1)
-# before type check
-# after validate
-# >>>
-# executing
-# <<<
-# => 2
-```
-
-In order, the available callbacks are `type_check`, `validate`, and `execute`.
-You can set `before`, `after`, or `around` on any of them.
-
-### Composition
-
-You can run interactions from within other interactions with `#compose`. If the
-interaction is successful, it'll return the result (just like if you had called
-it with `.run!`). If something went wrong, execution will halt immediately and
-the errors will be moved onto the caller.
-
-``` rb
-class Add < ActiveInteraction::Base
-  integer :x, :y
-
-  def execute
-    x + y
-  end
-end
-
-class AddThree < ActiveInteraction::Base
-  integer :x
-
-  def execute
-    compose(Add, x: x, y: 3)
-  end
-end
-
-AddThree.run!(x: 5)
-# => 8
-```
-
-To bring in filters from another interaction, use `.import_filters`. Combined
-with `inputs`, delegating to another interaction is a piece of cake.
-
-``` rb
-class AddAndDouble < ActiveInteraction::Base
-  import_filters Add
-
-  def execute
-    compose(Add, inputs) * 2
-  end
-end
-```
-
-Note that errors in composed interactions have a few tricky cases. See [the
-errors section][] for more information about them.
-
-### Descriptions
-
-Use the `desc` option to provide human-readable descriptions of filters. You
-should prefer these to comments because they can be used to generate
-documentation. The interaction class has a `.filters` method that returns a
-hash of filters. Each filter has a `#desc` method that returns the description.
-
-``` rb
-class Descriptive < ActiveInteraction::Base
-  string :first_name,
-    desc: 'your first name'
-  string :last_name,
-    desc: 'your last name'
-end
-
-Descriptive.filters.each do |name, filter|
-  puts "#{name}: #{filter.desc}"
-end
-# first_name: your first name
-# last_name: your last name
-```
-
-### Errors
-
-ActiveInteraction provides detailed errors for easier introspection and testing
-of errors. Detailed errors improve on regular errors by adding a symbol that
-represents the type of error that has occurred. Let's look at an example where
-an item is purchased using a credit card.
-
-``` rb
-class BuyItem < ActiveInteraction::Base
-  object :credit_card, :item
-  hash :options do
-    boolean :gift_wrapped
-  end
-
-  def execute
-    order = credit_card.purchase(item)
-    notify(credit_card.account)
-    order
-  end
-
-  private def notify(account)
-    # ...
-  end
-end
-```
-
-Having missing or invalid inputs causes the interaction to fail and return
-errors.
-
-``` rb
-outcome = BuyItem.run(item: 'Thing', options: { gift_wrapped: 'yes' })
-outcome.errors.messages
-# => {:credit_card=>["is required"], :item=>["is not a valid object"], :options=>["has an invalid nested value (\"gift_wrapped\" => \"yes\")"]}
-```
-
-Determining the type of error based on the string is difficult if not
-impossible. Calling `#details` instead of `#messages` on `errors` gives you
-the same list of errors with a testable label representing the error.
-
-``` rb
-outcome.errors.details
-# => {:credit_card=>[{:error=>:missing}], :item=>[{:type=>"object", :error=>:invalid_type}], :options=>[{:name=>"\"gift_wrapped\"", :value=>"\"yes\"", :error=>:invalid_nested}]}
-```
-
-Detailed errors can also be manually added during the execute call by passing a
-symbol to `#add` instead of a string.
-
-``` rb
-def execute
-  errors.add(:monster, :no_passage)
-end
-```
-
-These types of errors are standard as of Rails 5. ActiveInteraction's
-implementation is based off of [active_model-errors_details][].
-
-ActiveInteraction also supports merging errors. This is useful if you want to
-delegate validation to some other object. For example, if you have an
-interaction that updates a record, you might want that record to validate
-itself. By using the `#merge!` helper on `errors`, you can do exactly that.
-
-``` rb
-class UpdateThing < ActiveInteraction::Base
-  object :thing
-
-  def execute
-    unless thing.save
-      errors.merge!(thing.errors)
-    end
-
-    thing
-  end
-end
-```
-
-### Forms
-
-The outcome returned by `.run` can be used in forms as though it were an
-ActiveModel object. You can also create a form object by calling `.new` on the
-interaction.
-
-Given an application with an `Account` model we'll create a new `Account` using
-the `CreateAccount` interaction.
-
-```rb
-# GET /accounts/new
-def new
-  @account = CreateAccount.new
-end
-
-# POST /accounts
-def create
-  outcome = CreateAccount.run(params.fetch(:account, {}))
-
-  if outcome.valid?
-    redirect_to(outcome.result)
-  else
-    @account = outcome
-    render(:new)
-  end
-end
-```
-
-The form used to create a new `Account` has slightly more information on the
-`form_for` call than you might expect.
-
-```erb
-<%= form_for @account, as: :account, url: accounts_path do |f| %>
-  <%= f.text_field :first_name %>
-  <%= f.text_field :last_name %>
-  <%= f.submit 'Create' %>
-<% end %>
-```
-
-This is necessary because we want the form to act like it is creating a new
-`Account`. Defining `to_model` on the `CreateAccount` interaction tells the
-form to treat our interaction like an `Account`.
-
-```rb
-class CreateAccount < ActiveInteraction::Base
-  # ...
-
-  def to_model
-    Account.new
-  end
-end
-```
-
-Now our `form_for` call knows how to generate the correct URL and param name
-(i.e. `params[:account]`).
-
-```erb
-# app/views/accounts/new.html.erb
-<%= form_for @account do |f| %>
-  <%# ... %>
-<% end %>
-```
-
-If you have an interaction that updates an `Account`, you can define `to_model`
-to return the object you're updating.
-
-```rb
-class UpdateAccount < ActiveInteraction::Base
-  # ...
-
-  object :account
-
-  def to_model
-    account
-  end
-end
-```
-
-ActiveInteraction also supports [formtastic][] and [simple_form][]. The filters
-used to define the inputs on your interaction will relay type information to
-these gems. As a result, form fields will automatically use the appropriate
-input type.
-
-### Translations
-
-ActiveInteraction is i18n aware out of the box! All you have to do is add
-translations to your project. In Rails, these typically go into
-`config/locales`. For example, let's say that for some reason you want to print
-everything out backwards. Simply add translations for ActiveInteraction to your
-`hsilgne` locale.
-
-``` yml
-# config/locales/hsilgne.yml
-hsilgne:
-  active_interaction:
-    types:
-      array: yarra
-      boolean: naeloob
-      date: etad
-      date_time: emit etad
-      decimal: lamiced
-      file: elif
-      float: taolf
-      hash: hsah
-      integer: regetni
-      interface: ecafretni
-      object: tcejbo
-      string: gnirts
-      symbol: lobmys
-      time: emit
-    errors:
-      messages:
-        invalid: dilavni si
-        invalid_nested: (%{value} <= %{name}) eulav detsen dilavni na sah
-        invalid_type: '%{type} dilav a ton si'
-        missing: deriuqer si
-```
-
-Then set your locale and run interactions like normal.
-
-``` rb
-class I18nInteraction < ActiveInteraction::Base
-  string :name
-end
-
-I18nInteraction.run(name: false).errors.messages[:name]
-# => ["is not a valid string"]
-
-I18n.locale = :hsilgne
-I18nInteraction.run(name: false).errors.messages[:name]
-# => ["gnirts dilav a ton si"]
 ```
 
 ## Credits
