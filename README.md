@@ -25,12 +25,12 @@ Read more on [the project page][] or check out [the full documentation][].
   - [Optional Inputs](#optional-inputs)
   - [Grouped Inputs](#grouped-inputs)
   - [Validations](#validations)
+  - [Forms](#forms)
 - [Advanced Usage](#advanced-usage)
   - [Callbacks](#callbacks)
   - [Composition](#composition)
   - [Descriptions](#descriptions)
   - [Errors](#errors)
-  - [Forms](#forms)
   - [Translations](#translations)
 - [Filters](#filters)
   - [Array](#array)
@@ -259,6 +259,89 @@ SayHello.run!(name: 'Taylor')
 # => "Hello, Taylor!"
 ```
 
+### Forms
+
+The outcome returned by `.run` can be used in forms as though it were an
+ActiveModel object. You can also create a form object by calling `.new` on the
+interaction.
+
+Given an application with an `Account` model we'll create a new `Account` using
+the `CreateAccount` interaction.
+
+```rb
+# GET /accounts/new
+def new
+  @account = CreateAccount.new
+end
+
+# POST /accounts
+def create
+  outcome = CreateAccount.run(params.fetch(:account, {}))
+
+  if outcome.valid?
+    redirect_to(outcome.result)
+  else
+    @account = outcome
+    render(:new)
+  end
+end
+```
+
+The form used to create a new `Account` has slightly more information on the
+`form_for` call than you might expect.
+
+```erb
+<%= form_for @account, as: :account, url: accounts_path do |f| %>
+  <%= f.text_field :first_name %>
+  <%= f.text_field :last_name %>
+  <%= f.submit 'Create' %>
+<% end %>
+```
+
+This is necessary because we want the form to act like it is creating a new
+`Account`. Defining `to_model` on the `CreateAccount` interaction tells the
+form to treat our interaction like an `Account`.
+
+```rb
+class CreateAccount < ActiveInteraction::Base
+  # ...
+
+  def to_model
+    Account.new
+  end
+end
+```
+
+Now our `form_for` call knows how to generate the correct URL and param name
+(i.e. `params[:account]`).
+
+```erb
+# app/views/accounts/new.html.erb
+<%= form_for @account do |f| %>
+  <%# ... %>
+<% end %>
+```
+
+If you have an interaction that updates an `Account`, you can define `to_model`
+to return the object you're updating.
+
+```rb
+class UpdateAccount < ActiveInteraction::Base
+  # ...
+
+  object :account
+
+  def to_model
+    account
+  end
+end
+```
+
+ActiveInteraction also supports [formtastic][] and [simple_form][]. The filters
+used to define the inputs on your interaction will relay type information to
+these gems. As a result, form fields will automatically use the appropriate
+input type.
+
 ## Advanced usage
 
 ### Callbacks
@@ -442,89 +525,6 @@ class UpdateThing < ActiveInteraction::Base
   end
 end
 ```
-
-### Forms
-
-The outcome returned by `.run` can be used in forms as though it were an
-ActiveModel object. You can also create a form object by calling `.new` on the
-interaction.
-
-Given an application with an `Account` model we'll create a new `Account` using
-the `CreateAccount` interaction.
-
-```rb
-# GET /accounts/new
-def new
-  @account = CreateAccount.new
-end
-
-# POST /accounts
-def create
-  outcome = CreateAccount.run(params.fetch(:account, {}))
-
-  if outcome.valid?
-    redirect_to(outcome.result)
-  else
-    @account = outcome
-    render(:new)
-  end
-end
-```
-
-The form used to create a new `Account` has slightly more information on the
-`form_for` call than you might expect.
-
-```erb
-<%= form_for @account, as: :account, url: accounts_path do |f| %>
-  <%= f.text_field :first_name %>
-  <%= f.text_field :last_name %>
-  <%= f.submit 'Create' %>
-<% end %>
-```
-
-This is necessary because we want the form to act like it is creating a new
-`Account`. Defining `to_model` on the `CreateAccount` interaction tells the
-form to treat our interaction like an `Account`.
-
-```rb
-class CreateAccount < ActiveInteraction::Base
-  # ...
-
-  def to_model
-    Account.new
-  end
-end
-```
-
-Now our `form_for` call knows how to generate the correct URL and param name
-(i.e. `params[:account]`).
-
-```erb
-# app/views/accounts/new.html.erb
-<%= form_for @account do |f| %>
-  <%# ... %>
-<% end %>
-```
-
-If you have an interaction that updates an `Account`, you can define `to_model`
-to return the object you're updating.
-
-```rb
-class UpdateAccount < ActiveInteraction::Base
-  # ...
-
-  object :account
-
-  def to_model
-    account
-  end
-end
-```
-
-ActiveInteraction also supports [formtastic][] and [simple_form][]. The filters
-used to define the inputs on your interaction will relay type information to
-these gems. As a result, form fields will automatically use the appropriate
-input type.
 
 ### Translations
 
