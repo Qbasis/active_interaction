@@ -25,18 +25,19 @@
   `execute` method now returns `[result, errors, moves]` instead of a single
   value that was either the `result` or an error object. The `errors` and
   `moves` will only be set when a composed interaction has failed.
-  
+
 ## Added
 
 - `merge!` now accepts an optional `:move` attribute to map errors on merged
-  fields/filters to filters on the source interaction
-- `link` which is used when passing inputs to a composed interaction where the
-  errors should be mapped back to the original input
-- `autolink` which creates a hash of linked values to pass to a composed
+  fields/filters to filters on the source interaction.
+- `automove` creates a hash for the `:move` option of `merge!` where the keys
+  and values are the same.
+- `link` is used when passing inputs to a composed interaction where the
+  errors should be mapped back to the original input.
+- `autolink` creates a hash of linked values to pass to a composed
   interaction where the names of the inputs of the two interactions match
-  exactly
-- `automove` 
-  
+  exactly.
+
 ## Upgrading
 
 We've removed the predicate methods that were automatically generated for each
@@ -47,11 +48,11 @@ replaced with that same check.
 # v3.5.2
 class Example < ActiveInteraction::Base
   string :first_name
-  
+
   validates :first_name,
     presence: true,
     if: :first_name?
-    
+
   def execute
     # ...
   end
@@ -60,11 +61,11 @@ end
 # v4.0.0
 class Example < ActiveInteraction::Base
   string :first_name
-  
+
   validates :first_name,
     presence: true,
     unless: 'first_name.nil?'
-    
+
   def execute
     # ...
   end
@@ -128,7 +129,7 @@ the default to be used.
 class Example < ActiveInteraction::Base
   integer :i
   boolean :b, default: false
-  
+
   def execute
     [i, b]
   end
@@ -159,10 +160,10 @@ When using `merge!`, all errors are now merged on to `:base`.
 ```ruby
 class Example < ActiveInteraction::Base
   integer :a, :b
-  
+
   validates :a,
     numericality: { greater_than: 0 }
-  
+
   def execute
     [a, b]
   end
@@ -170,10 +171,10 @@ end
 
 class Other < ActiveInteraction::Base
   integer :a, :b
-  
+
   def execute
     outcome = Example.run(a: a, b: b)
-    
+
     if outcome.valid?
       outome.result
     else
@@ -196,10 +197,10 @@ If you want to move the errors you can do so with `:move`.
 ```ruby
 class Example < ActiveInteraction::Base
   integer :a, :b
-  
+
   validates :a,
     numericality: { greater_than: 0 }
-  
+
   def execute
     [a, b]
   end
@@ -207,10 +208,10 @@ end
 
 class Other < ActiveInteraction::Base
   integer :c, :d
-  
+
   def execute
     outcome = Example.run(a: c, b: d)
-    
+
     if outcome.valid?
       outome.result
     else
@@ -229,10 +230,10 @@ by default.
 ```ruby
 class Example < ActiveInteraction::Base
   integer :a, :b
-  
+
   validates :a,
     numericality: { greater_than: 0 }
-  
+
   def execute
     [a, b]
   end
@@ -240,7 +241,7 @@ end
 
 class Other < ActiveInteraction::Base
   integer :a, :b
-  
+
   def execute
     compose(Example, a: a, b: b)
   end
@@ -263,10 +264,10 @@ to the linked filter on the parent interaction.
 ```ruby
 class Example < ActiveInteraction::Base
   integer :a, :b
-  
+
   validates :a,
     numericality: { greater_than: 0 }
-  
+
   def execute
     [a, b]
   end
@@ -274,7 +275,7 @@ end
 
 class Other < ActiveInteraction::Base
   integer :a, :b
-  
+
   def execute
     compose(Example, a: link(:a), b: link(:b))
   end
@@ -467,7 +468,7 @@ some odd cases as noted in the the [README](README.md#errors).
 
 - [#215][]: Rather than symbolizing keys all hashes now use indifferent access.
   This takes care of potential but unlikely DoS attacks noted in [#163][].
-  
+
 ## Upgrading
 
 Please read through the Changed section for a full list of changes.
