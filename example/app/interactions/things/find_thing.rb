@@ -1,5 +1,3 @@
-# coding: utf-8
-
 require 'active_interaction'
 
 # Find a thing.

@@ -1,5 +1,3 @@
-# coding: utf-8
-
 # Control the things.
 class ThingsController < ActionController::Base
   # GET /things

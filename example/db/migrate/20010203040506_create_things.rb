@@ -1,5 +1,3 @@
-# coding: utf-8
-
 # Create some things with some names.
 class CreateThings < ActiveRecord::Migration
   def change
