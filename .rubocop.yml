@@ -3,22 +3,27 @@ AllCops:
   - example/db/schema.rb
   - tmp/**/*
   - vendor/**/*
+  TargetRubyVersion: 2.0
 Documentation:
   Exclude:
   - spec/**/*
+Layout/AlignParameters:
+  EnforcedStyle: with_fixed_indentation
+Layout/MultilineMethodCallIndentation:
+  EnforcedStyle: indented
+Layout/MultilineOperationIndentation:
+  Enabled: false
+Metrics/BlockLength:
+  Enabled: false
 Metrics/ClassLength:
   Max: 120
 Metrics/MethodLength:
   Max: 15
-Style/AlignParameters:
-  EnforcedStyle: with_fixed_indentation
-Style/FileName:
+Naming/FileName:
   Exclude:
   - gemfiles/*
-Style/MultilineMethodCallIndentation:
-  EnforcedStyle: indented
-Style/MultilineOperationIndentation:
-  Enabled: false
+Style/FormatStringToken:
+  EnforcedStyle: template
 Style/PercentLiteralDelimiters:
   PreferredDelimiters:
     '%W': '[]'
