@@ -579,7 +579,7 @@ method. Each method has the same signature:
 
 - Some symbolic names. These are the attributes to create.
 
-- An optional hash of options. Each filter supports at least these two options:
+- An optional hash of options. Each filter supports at least these options:
 
   - `default` is the fallback value to use if `nil` is given. To make a filter
     optional, set `default: nil`.
@@ -588,16 +588,20 @@ method. Each method has the same signature:
     generating documentation. For more information about this, read [the
     descriptions section](#descriptions).
 
+  - `groups` is an array of group names used to get a group of inputs later by
+    calling `inputs.group` and passing the name of the group.
+
 - An optional block of sub-filters. Only [array](#array) and [hash](#hash)
   filters support this. Other filters will ignore blocks when given to them.
 
 Let's take a look at an example filter. It defines three inputs: `x`, `y`, and
 `z`. Those inputs are optional and they all share the same description ("an
-example filter").
+example filter") and are in group `:a`.
 
 ``` rb
 array :x, :y, :z,
   default: nil,
+  groups: [:a],
   desc: 'an example filter' do
     # Some filters support sub-filters here.
   end
