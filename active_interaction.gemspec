@@ -33,6 +33,7 @@ Gem::Specification.new do |gem|
 
   {
     'actionpack' => [],
+    'activerecord' => [],
     'benchmark-ips' => ['~> 2.7'],
     'bundler' => ['~> 1.12'],
     'coveralls' => ['~> 0.8'],
@@ -40,6 +41,7 @@ Gem::Specification.new do |gem|
     'rake' => ['~> 12.1'],
     'rspec' => ['~> 3.5'],
     'rubocop' => ['~> 0.50.0'],
+    'sqlite3' => ['~> 1.3'],
     'yard' => ['~> 0.9']
   }.each do |name, versions|
     gem.add_development_dependency name, *versions
