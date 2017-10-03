@@ -137,7 +137,8 @@ module ActiveInteraction
     end
 
     def attribute?(attribute)
-      @base.respond_to?(attribute)
+      # @base.respond_to?(attribute)
+      return true
     end
 
     def translate(other, attribute, error)
